@@ -137,19 +137,32 @@ pipeline {
         */
         stage('Security Vulnerability Scan') {
 
-            steps {
+    steps {
 
-                echo 'Scanning Docker image with Trivy'
+        echo "Running Trivy security scan"
 
-                sh '''
-                    trivy image \
-                    --severity HIGH,CRITICAL \
-                    --exit-code 0 \
-                    ${IMAGE_NAME}:${BUILD_NUMBER}
-                '''
 
-            }
-        }
+        sh """
+
+        trivy image \
+        --severity HIGH,CRITICAL \
+        --format table \
+        --output trivy-report.txt \
+        ${IMAGE_NAME}:${IMAGE_TAG}
+
+
+        trivy image \
+        --severity HIGH,CRITICAL \
+        --exit-code 1 \
+        --ignore-unfixed \
+        ${IMAGE_NAME}:${IMAGE_TAG}
+
+
+        """
+
+    }
+
+}
 
 
 
