@@ -1,15 +1,19 @@
 pipeline {
 
+    /*
+      Jenkins pipeline runs inside Node.js 16 container
+      as required by the assignment.
+    */
     agent {
         docker {
             image 'node:16'
-            args '-u root'
         }
     }
 
 
     environment {
 
+        // DockerHub image name
         IMAGE_NAME = "nibrazkhan/nibraz-node-app"
 
     }
@@ -18,11 +22,15 @@ pipeline {
     stages {
 
 
+        /*
+          Stage 1:
+          Retrieve application source code from GitHub
+        */
         stage('Checkout') {
 
             steps {
 
-                echo 'Checking out source code'
+                echo 'Checking out source code from repository'
 
                 checkout scm
 
@@ -31,6 +39,10 @@ pipeline {
 
 
 
+        /*
+          Stage 2:
+          Install Node.js application dependencies
+        */
         stage('Install Dependencies') {
 
             steps {
@@ -38,9 +50,9 @@ pipeline {
                 echo 'Installing Node.js dependencies'
 
                 sh '''
-                node --version
-                npm --version
-                npm install
+                    node --version
+                    npm --version
+                    npm install
                 '''
 
             }
@@ -48,23 +60,41 @@ pipeline {
 
 
 
+        /*
+          Stage 3:
+          Execute application tests
+          Skips safely if no test directory exists
+        */
         stage('Unit Testing') {
 
             steps {
 
-                echo 'Running application tests'
+                script {
 
-                sh '''
+                    if (fileExists('test')) {
 
-                npm test || echo "No tests configured"
+                        echo 'Running automated tests'
 
-                '''
+                        sh 'npm test'
+
+                    } 
+                    else {
+
+                        echo 'No automated tests found. Skipping test execution.'
+
+                    }
+
+                }
 
             }
         }
 
 
 
+        /*
+          Stage 4:
+          Build Docker image from application Dockerfile
+        */
         stage('Build Docker Image') {
 
             steps {
@@ -73,8 +103,8 @@ pipeline {
 
                 sh '''
 
-                docker build \
-                -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+                    docker build \
+                    -t ${IMAGE_NAME}:${BUILD_NUMBER} .
 
                 '''
 
@@ -83,15 +113,21 @@ pipeline {
 
 
 
-        stage('Docker Image Scan') {
+        /*
+          Stage 5:
+          Scan Docker image vulnerabilities
+          using Trivy security scanner
+        */
+        stage('Security Vulnerability Scan') {
 
             steps {
 
-                echo 'Scanning image vulnerabilities'
+                echo 'Scanning Docker image with Trivy'
 
                 sh '''
 
-                trivy image ${IMAGE_NAME}:${BUILD_NUMBER}
+                    trivy image \
+                    ${IMAGE_NAME}:${BUILD_NUMBER}
 
                 '''
 
@@ -100,56 +136,79 @@ pipeline {
 
 
 
+        /*
+          Stage 6:
+          Push Docker image to DockerHub
+          Credentials are managed through Jenkins
+        */
         stage('Push Docker Image') {
 
             steps {
 
-                echo 'Pushing image to Docker registry'
+                echo 'Pushing Docker image to registry'
+
 
                 withCredentials([
+
                     usernamePassword(
-                    credentialsId: 'dockerhub-credentials',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
+
+                        credentialsId: 'dockerhub-credentials',
+
+                        usernameVariable: 'DOCKER_USERNAME',
+
+                        passwordVariable: 'DOCKER_PASSWORD'
+
                     )
-                ]){
+
+                ]) {
 
 
-                sh '''
+                    sh '''
 
-                echo $DOCKER_PASS | \
-                docker login \
-                -u $DOCKER_USER \
-                --password-stdin
+                    echo $DOCKER_PASSWORD | docker login \
+                    -u $DOCKER_USERNAME \
+                    --password-stdin
 
 
-                docker push \
-                ${IMAGE_NAME}:${BUILD_NUMBER}
+                    docker push \
+                    ${IMAGE_NAME}:${BUILD_NUMBER}
 
-                '''
+
+                    '''
 
                 }
 
             }
+
         }
 
     }
 
 
 
+    /*
+      Pipeline completion status reporting
+    */
     post {
 
 
         success {
 
-            echo 'CI/CD pipeline completed successfully'
+            echo 'CI/CD Pipeline completed successfully.'
 
         }
 
 
         failure {
 
-            echo 'Pipeline failed. Check logs.'
+            echo 'CI/CD Pipeline failed. Check console logs.'
+
+        }
+
+
+        always {
+
+            echo 'Pipeline execution finished.'
 
         }
 
