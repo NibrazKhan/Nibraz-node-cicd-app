@@ -1,14 +1,15 @@
 pipeline {
 
     /*
-      Jenkins pipeline runs inside Node.js 16 container
-      as required by the assignment.
+      Stages run on the Jenkins container by default, because it has
+      the Docker CLI and Trivy installed.
+
+      The Node.js stages (Install Dependencies, Unit Testing) run inside
+      a Node.js 16 container, as required by the assignment.
+      reuseNode true keeps them in the same workspace so the Docker
+      build sees the same source code and node_modules.
     */
-    agent {
-        docker {
-            image 'node:16'
-        }
-    }
+    agent any
 
 
     environment {
@@ -42,8 +43,16 @@ pipeline {
         /*
           Stage 2:
           Install Node.js application dependencies
+          (runs inside Node.js 16 container)
         */
         stage('Install Dependencies') {
+
+            agent {
+                docker {
+                    image 'node:16'
+                    reuseNode true
+                }
+            }
 
             steps {
 
@@ -64,8 +73,16 @@ pipeline {
           Stage 3:
           Execute application tests
           Skips safely if no test directory exists
+          (runs inside Node.js 16 container)
         */
         stage('Unit Testing') {
+
+            agent {
+                docker {
+                    image 'node:16'
+                    reuseNode true
+                }
+            }
 
             steps {
 
@@ -77,7 +94,7 @@ pipeline {
 
                         sh 'npm test'
 
-                    } 
+                    }
                     else {
 
                         echo 'No automated tests found. Skipping test execution.'
@@ -94,6 +111,7 @@ pipeline {
         /*
           Stage 4:
           Build Docker image from application Dockerfile
+          (runs on Jenkins container, which has the Docker CLI)
         */
         stage('Build Docker Image') {
 
@@ -102,10 +120,8 @@ pipeline {
                 echo 'Building Docker image'
 
                 sh '''
-
                     docker build \
                     -t ${IMAGE_NAME}:${BUILD_NUMBER} .
-
                 '''
 
             }
@@ -117,6 +133,7 @@ pipeline {
           Stage 5:
           Scan Docker image vulnerabilities
           using Trivy security scanner
+          (runs on Jenkins container, which has Trivy)
         */
         stage('Security Vulnerability Scan') {
 
@@ -125,10 +142,10 @@ pipeline {
                 echo 'Scanning Docker image with Trivy'
 
                 sh '''
-
                     trivy image \
+                    --severity HIGH,CRITICAL \
+                    --exit-code 0 \
                     ${IMAGE_NAME}:${BUILD_NUMBER}
-
                 '''
 
             }
@@ -147,7 +164,6 @@ pipeline {
 
                 echo 'Pushing Docker image to registry'
 
-
                 withCredentials([
 
                     usernamePassword(
@@ -162,18 +178,15 @@ pipeline {
 
                 ]) {
 
-
                     sh '''
+                        echo "$DOCKER_PASSWORD" | docker login \
+                        -u "$DOCKER_USERNAME" \
+                        --password-stdin
 
-                    echo $DOCKER_PASSWORD | docker login \
-                    -u $DOCKER_USERNAME \
-                    --password-stdin
+                        docker push ${IMAGE_NAME}:${BUILD_NUMBER}
 
-
-                    docker push \
-                    ${IMAGE_NAME}:${BUILD_NUMBER}
-
-
+                        docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest
+                        docker push ${IMAGE_NAME}:latest
                     '''
 
                 }
@@ -191,13 +204,11 @@ pipeline {
     */
     post {
 
-
         success {
 
             echo 'CI/CD Pipeline completed successfully.'
 
         }
-
 
         failure {
 
@@ -205,8 +216,10 @@ pipeline {
 
         }
 
-
         always {
+
+            // Remove stored DockerHub login from the Jenkins container
+            sh 'docker logout || true'
 
             echo 'Pipeline execution finished.'
 
@@ -215,3 +228,4 @@ pipeline {
     }
 
 }
+
