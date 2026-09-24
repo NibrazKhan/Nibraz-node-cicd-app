@@ -17,6 +17,9 @@ pipeline {
         // DockerHub image name
         IMAGE_NAME = "nibrazkhan/nibraz-node-app"
 
+        // Image tag, defined once and reused by every stage
+        IMAGE_TAG = "${BUILD_NUMBER}"
+
     }
 
 
@@ -71,8 +74,8 @@ pipeline {
 
         /*
           Stage 3:
-          Execute application tests
-          Skips safely if no test directory exists
+          Execute application tests from the tests/ folder
+          Skips safely if the folder does not exist
           (runs inside Node.js 16 container)
         */
         stage('Unit Testing') {
@@ -88,7 +91,7 @@ pipeline {
 
                 script {
 
-                    if (fileExists('test')) {
+                    if (fileExists('tests')) {
 
                         echo 'Running automated tests'
 
@@ -97,7 +100,7 @@ pipeline {
                     }
                     else {
 
-                        echo 'No automated tests found. Skipping test execution.'
+                        echo 'No tests folder found. Skipping test execution.'
 
                     }
 
@@ -121,7 +124,7 @@ pipeline {
 
                 sh '''
                     docker build \
-                    -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+                    -t ${IMAGE_NAME}:${IMAGE_TAG} .
                 '''
 
             }
@@ -131,38 +134,46 @@ pipeline {
 
         /*
           Stage 5:
-          Scan Docker image vulnerabilities
-          using Trivy security scanner
+          Scan Docker image for vulnerabilities using Trivy.
+          The first scan writes a full report; the second scan
+          fails the build on fixable HIGH/CRITICAL findings
+          (security gate, as required by the assignment).
           (runs on Jenkins container, which has Trivy)
         */
         stage('Security Vulnerability Scan') {
 
-    steps {
+            steps {
 
-        echo "Running Trivy security scan"
+                echo 'Running Trivy security scan'
 
+                sh '''
+                    trivy image \
+                    --severity HIGH,CRITICAL \
+                    --format table \
+                    --output trivy-report.txt \
+                    ${IMAGE_NAME}:${IMAGE_TAG}
 
-        sh """
+                    trivy image \
+                    --severity HIGH,CRITICAL \
+                    --exit-code 1 \
+                    --ignore-unfixed \
+                    ${IMAGE_NAME}:${IMAGE_TAG}
+                '''
 
-        trivy image \
-        --severity HIGH,CRITICAL \
-        --format table \
-        --output trivy-report.txt \
-        ${IMAGE_NAME}:${IMAGE_TAG}
+            }
 
+            post {
 
-        trivy image \
-        --severity HIGH,CRITICAL \
-        --exit-code 1 \
-        --ignore-unfixed \
-        ${IMAGE_NAME}:${IMAGE_TAG}
+                always {
 
+                    // Keep the scan report even when the gate fails the build
+                    archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
 
-        """
+                }
 
-    }
+            }
 
-}
+        }
 
 
 
@@ -196,9 +207,9 @@ pipeline {
                         -u "$DOCKER_USERNAME" \
                         --password-stdin
 
-                        docker push ${IMAGE_NAME}:${BUILD_NUMBER}
+                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
 
-                        docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest
+                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
                         docker push ${IMAGE_NAME}:latest
                     '''
 
