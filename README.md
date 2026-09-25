@@ -1,12 +1,28 @@
-# AWS Elastic Beanstalk Node.js Sample App
+# Node.js Application - Jenkins CI/CD Fork
 
-This repository contains a sample Node.js web application built using [Express](https://expressjs.com/), meant to be used as part of the AWS DevOps Learning Path.
+## Project Overview
 
-## Security
+This repository is a forked version of the original Node.js application repository, adapted to demonstrate a complete CI/CD workflow using Jenkins, Docker, Docker Compose, and Trivy security scanning.
 
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
+The purpose of this fork is to integrate automated build, testing, containerisation, vulnerability scanning, and Docker image publishing as part of a DevOps pipeline implementation.
 
-## License
+---
 
-This library is licensed under the MIT-0 License. See the LICENSE file.
+# Fork Purpose
+
+The fork was created to:
+
+- Integrate Jenkins-based CI/CD automation
+- Add containerisation using Docker
+- Configure Docker Compose for environment management
+- Automate application testing
+- Perform dependency vulnerability scanning
+- Build and publish Docker images securely
+
+---
+
+# CI/CD Pipeline Workflow
+
+The implemented pipeline follows this process:
+
 
