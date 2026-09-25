@@ -10,6 +10,12 @@ pipeline {
       build sees the same source code and node_modules.
     */
     agent any
+    
+    options {
+    buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '10'))
+    timestamps()
+  }
+
 
 
     environment {
@@ -174,7 +180,34 @@ pipeline {
             }
 
         }
+        /*
+          Stage :
+          Archive security report and important artifacts so they can be reviewed later.
+        */
+	stage('Archive Security Report') {
 
+    steps {
+
+        archiveArtifacts artifacts: 'trivy-report.txt',
+        fingerprint: true
+
+    }
+
+}
+	stage('Security Scan') {
+	  steps {
+	    sh 'npm audit --json > npm-audit.json || true'
+	  }
+	  post {
+	    always {
+	      recordIssues(
+		enabledForFailure: true,
+		tools: [npmAudit(pattern: 'npm-audit.json')]
+	      )
+	      archiveArtifacts artifacts: 'npm-audit.json', allowEmptyArchive: true
+	    }
+	  }
+	}
 
 
         /*
